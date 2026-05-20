@@ -1,0 +1,136 @@
+# Python virtual environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDE files - PyCharm
+.idea/
+*.iml
+*.iws
+.idea_modules/
+.idea/
+
+# VS Code (إذا كنت تستخدمه لاحقاً)
+.vscode/
+*.code-workspace
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+airflow.db
+logs/
+*.db
+
+# Docker related
+docker-compose.override.yml
+.dockerignore
+
+# Airflow specific
+airflow.cfg
+webserver_config.py
+airflow-webserver.pid
+scheduler.pid
+worker.pid
+
+# Spark related
+/spark-warehouse/
+/metadata_logs/
+/spark-workdir/
+*.crc
+*.parquet
+checkpoint/
+
+# Kafka related
+/kafka-logs/
+/zookeeper-data/
+/zookeeper-logs/
+
+# Cassandra related
+/cassandra-data/
+/cassandra-logs/
+/saved_caches/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Data files
+*.json
+*.csv
+*.parquet
+*.avro
+*.orc
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+*.egg
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secret files
+*.pem
+*.key
+*.crt
+secrets/
+credentials.json
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+*.temp
+*~
+
+# Generated files
+*.pyc
+__pycache__/
+*.pyo
+.pyd
+.python-version
+
+# Airflow dags compiled files
+dags/__pycache__/
+dags/*.pyc
+
+# Output directories
+output/
+results/
+data/
+temp/
+tmp/
+
+# Requirements files (اختياري - إذا أردت حفظهم)
+# requirements.txt  # إزالة التعليق إذا أردت استثناء ملف requirements
+# requirements-dev.txt
+
+# Script logs
+/script/*.log
