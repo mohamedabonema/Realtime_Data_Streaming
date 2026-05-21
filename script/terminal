@@ -1,0 +1,35 @@
+قولي كل الخطواط الترينمال اللي عملنها كلها من الاول للاخر10:23 AMClaude responded: ١ — تجهيز الملفات:١ — تجهيز الملفات:
+powershellmkdir dags, script
+
+٢ — تصحيح الـ entrypoint (Windows line endings):
+powershell(Get-Content .\script\entrypoint.sh -Raw) -replace "`r`n", "`n" | Set-Content .\script\entrypoint.sh -NoNewline
+
+٣ — تصحيح الـ requirements.txt:
+powershellSet-Content .\requirements.txt -Value "apache-airflow==2.6.0`nkafka-python==2.0.2`nrequests==2.31.0`nurllib3==2.0.7`ncertifi==2024.2.2`napache-airflow-providers-apache-kafka==1.3.0" -Encoding UTF8
+
+٤ — تشغيل Docker:
+powershelldocker compose up -d
+
+٥ — تشغيل الـ scheduler:
+powershelldocker compose up -d scheduler
+
+٦ — تأكد إن Kafka استلم البيانات:
+powershelldocker exec -it broker kafka-topics --list --bootstrap-server localhost:9092
+
+٧ — إصلاح permissions الـ Spark:
+powershelldocker exec -it --user root spark-master mkdir -p /home/spark/.ivy2/cache
+docker exec -it --user root spark-master chmod -R 777 /home/spark/.ivy2
+
+٨ — نسخ spark_stream.py للـ container:
+powershelldocker cp spark_stream.py spark-master:/opt/spark/spark_stream.py
+
+٩ — تثبيت cassandra-driver:
+powershelldocker exec -it --user root spark-master pip install cassandra-driver
+
+١٠ — تشغيل Spark:
+powershelldocker exec -it spark-master /opt/spark/bin/spark-submit --packages com.datastax.spark:spark-cassandra-connector_2.12:3.4.1,org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1 /opt/spark/spark_stream.py
+
+١١ — التحقق من البيانات في Cassandra:
+powershelldocker exec -it cassandra cqlsh -u cassandra -p cassandra
+وجوا الـ cqlsh:
+sqlSELECT * FROM spark_streams.created_users LIMIT 10;
