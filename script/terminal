@@ -33,3 +33,14 @@ powershelldocker exec -it spark-master /opt/spark/bin/spark-submit --packages co
 powershelldocker exec -it cassandra cqlsh -u cassandra -p cassandra
 وجوا الـ cqlsh:
 sqlSELECT * FROM spark_streams.created_users LIMIT 10;
+
+أيوه ينفع! تقدر تصدّر البيانات من Cassandra لـ CSV بالأمر ده:
+١ — جوا الـ cqlsh:
+powershelldocker exec -it cassandra cqlsh -u cassandra -p cassandra
+sqlCOPY spark_streams.created_users TO '/tmp/users.csv' WITH HEADER = TRUE;
+٢ — انسخ الـ CSV من الـ container لجهازك:
+powershelldocker cp cassandra:/tmp/users.csv .\users.csv
+exit
+وبعدين في PowerShell:
+powershelldocker cp cassandra:/tmp/users.csv .\users.csv
+start .\users.csv
