@@ -1,3 +1,200 @@
+
+Claude finished the response
+
+kafka_stream.py
+68 lines
+
+py
+
+
+docker-compose.yml
+199 lines
+
+yml
+
+
+requirements.txt
+15 lines
+
+txt
+
+
+spark_stream.py
+158 lines
+
+py
+
+عندى مشكله ف ان الكود مش بيكمل ويستقبل ب سبارك ويحول لكاسندرا والوركر والماستر مش شتغلين ع دوكر عرفني اي هيحصل واحد واجده
+
+9:26 AM
+هوضح لك المشاكل الموجودة واحدة واحدة بالتفصيل.
+
+
+
+فيه ٦ مشاكل محتاج تصلحهم واحدة واحدة:
+
+🔴 المشاكل الحرجة (بتمنع الـ pipeline من الشغل خالص)
+مشكلة ١: Port conflict في docker-compose.yml
+spark-master و webserver كلاهما بيعمل publish لـ port 8080. ده بيخلي Docker يرفض يشغّل أحدهم.
+
+الحل: غيّر port الـ Spark UI:
+
+yaml
+# spark-master
+ports:
+  - "8081:8080"   # غيّر 8080 لـ 8081 على الـ host
+مشكلة ٢: Spark master/worker خارج network confluent
+الـ spark-master و spark-worker في الـ compose مفيهمش networks: confluent، فمش بيشوفوا Kafka ولا Cassandra خالص.
+
+الحل: ضيف الـ network ليهم:
+
+yaml
+spark-master:
+  image: bitnami/spark:3.5  # شوف تعليق مشكلة ٦ كمان
+  networks:
+    - confluent
+
+spark-worker:
+  networks:
+    - confluent
+🟡 المشاكل المهمة (الـ Spark بيشتغل بس مش بيوصل للـ services)
+مشكلة ٣: Cassandra host في spark_stream.py
+python
+# ❌ غلط - localhost مش بيشتغل جوا Docker
+cluster = Cluster(['localhost'])
+
+# ✅ صح
+cluster = Cluster(['cassandra'])
+مشكلة ٤: Kafka host في spark_stream.py
+python
+# ❌ غلط
+.option('kafka.bootstrap.servers', 'localhost:9092')
+
+# ✅ صح
+.option('kafka.bootstrap.servers', 'broker:29092')
+مشكلة ٥: حقل dob ناقص من الـ Spark schema
+format_data بتضيف dob في الـ dict، لكن create_selection_df_from_kafka في spark_stream.py مش فاهياش في الـ StructType — فبتتحذف صامتة.
+
+الحل: ضيف السطر ده في الـ schema:
+
+python
+StructField("dob", StringType(), True),
+🟣 مشكلة Image الـ Spark
+apache/spark:3.5.0 الـ official image مش بتقبل SPARK_MODE environment variable — ده بيشتغل مع Bitnami image بس.
+
+الحل: غيّر الـ image:
+
+yaml
+spark-master:
+  image: bitnami/spark:3.5
+  environment:
+    - SPARK_MODE=master
+
+spark-worker:
+  image: bitnami/spark:3.5
+  environment:
+    - SPARK_MODE=worker
+    - SPARK_MASTER_URL=spark://spark-master:7077
+بعد التصليح، الترتيب الصح لتشغيل الـ services: zookeeper → broker → schema-registry → postgres → webserver → scheduler → spark-master → spark-worker → cassandra_db
+
+تبغى أعمل لك الـ docker-compose.yml و spark_stream.py معدلين بالكامل؟
+
+ابعتلى الاكواد كاممله اخدها كوبي
+
+9:28 AM
+
+Reading skill files before creating files
+Reading skill files before creating files
+الكود موجود في context بالفعل، هكتب الـ files المعدلة مباشرة.
+
+
+Created 4 files, read a file
+Created 4 files, read a file
+الـ 4 files جاهزين. ملخص التعديلات اللي اتعملت:
+
+docker-compose.yml:
+
+spark-master و spark-worker → image اتغير من apache/spark لـ bitnami/spark:3.5
+ضافتلهم networks: confluent عشان يشوفوا باقي الـ services
+Port الـ Spark UI اتغير من 8080 لـ 8082 عشان مش يتعارض مع Airflow
+spark_stream.py:
+
+Cluster(['localhost']) → Cluster(['cassandra'])
+localhost:9092 → broker:29092
+ضاف dob في الـ StructSchema
+الـ Cassandra connector اتغير من _2.13 لـ _2.12 (اللي compatible مع Spark 3.5)
+kafka_stream.py:
+
+تعديل بسيط: json.dumps(res, default=str) عشان الـ uuid و datetime objects متعملش error وقت التحويل لـ JSON
+
+Docker compose
+YML
+
+Spark stream
+PY
+
+Kafka stream
+PY
+
+Requirements
+TXT
+
+.gitignore
+gitignore
+
+
+entrypoint.sh
+22 lines
+
+sh
+
+9:32 AM
+عندك مشكلتين في الـ entrypoint.sh:
+
+
+Created 2 files, ran a command, read a file
+Created 2 files, ran a command, read a file
+التعديلات اللي اتعملت:
+
+entrypoint.sh — مشكلتين:
+
+الأولى: السطر ده كان غلط:
+
+bash
+# ❌ غلط - بيحاول ينفذ python كـ command وبيحط output في pip
+$(command python) pip install --upgrade pip
+
+# ✅ صح
+pip install --upgrade pip
+الـ $(command python) بترجع الـ path بتاع python وبتحاول تنفذه كـ command منفصل — مش محتاجها هنا، pip مباشرة كافية.
+
+الثانية: الـ requirements path كان ناقص:
+
+bash
+# ❌ غلط - بيدور على requirements.txt في المكان الغلط
+pip install --user -r requirements.txt
+
+# ✅ صح
+pip install --user -r /opt/airflow/requirements.txt
+gitignore.: الملف اتنظف من الـ Windows line endings (\r\n) اللي كانت موجودة وممكن تسبب مشاكل على Linux.
+
+ملاحظة: بعد تنزيل entrypoint.sh لازم تديه permission:
+
+bash
+chmod +x script/entrypoint.sh
+
+Entrypoint
+SH
+
+.gitignore
+GITIGNORE
+
+Want to be notified when Claude responds?
+ودول اعدلهم
+
+
+Claude is AI and can make mistakes. Please double-check responses.
+· GITIGNORE
 # Python virtual environment
 venv/
 env/
@@ -18,9 +215,8 @@ __pycache__/
 *.iml
 *.iws
 .idea_modules/
-.idea/
 
-# VS Code (إذا كنت تستخدمه لاحقاً)
+# VS Code
 .vscode/
 *.code-workspace
 
@@ -128,9 +324,6 @@ data/
 temp/
 tmp/
 
-# Requirements files (اختياري - إذا أردت حفظهم)
-# requirements.txt  # إزالة التعليق إذا أردت استثناء ملف requirements
-# requirements-dev.txt
-
 # Script logs
 /script/*.log
+
