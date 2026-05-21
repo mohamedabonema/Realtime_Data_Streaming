@@ -1,5 +1,5 @@
 import logging
-import uuid
+
 from cassandra.cluster import Cluster
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
@@ -16,43 +16,27 @@ def create_keyspace(session):
 
 def create_table(session):
     session.execute("""
-                    CREATE TABLE IF NOT EXISTS spark_streams.created_users
-                    (
-                        id
-                        UUID
-                        PRIMARY
-                        KEY,
-                        first_name
-                        TEXT,
-                        last_name
-                        TEXT,
-                        gender
-                        TEXT,
-                        address
-                        TEXT,
-                        post_code
-                        TEXT,
-                        email
-                        TEXT,
-                        username
-                        TEXT,
-                        dob
-                        TEXT,
-                        registered_date
-                        TEXT,
-                        phone
-                        TEXT,
-                        picture
-                        TEXT
-                    );
-                    """)
+    CREATE TABLE IF NOT EXISTS spark_streams.created_users (
+        id UUID PRIMARY KEY,
+        first_name TEXT,
+        last_name TEXT,
+        gender TEXT,
+        address TEXT,
+        post_code TEXT,
+        email TEXT,
+        username TEXT,
+        dob TEXT,
+        registered_date TEXT,
+        phone TEXT,
+        picture TEXT);
+    """)
     print("Table created successfully!")
 
 
 def insert_data(session, **kwargs):
     print("inserting data...")
 
-    user_id = uuid.UUID(kwargs.get('id')) if kwargs.get('id') else uuid.uuid4()
+    user_id = kwargs.get('id')
     first_name = kwargs.get('first_name')
     last_name = kwargs.get('last_name')
     gender = kwargs.get('gender')
@@ -67,42 +51,40 @@ def insert_data(session, **kwargs):
 
     try:
         session.execute("""
-                        INSERT INTO spark_streams.created_users(id, first_name, last_name, gender, address,
-                                                                post_code, email, username, dob, registered_date, phone,
-                                                                picture)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """, (user_id, first_name, last_name, gender, address,
-                              postcode, email, username, dob, registered_date, phone, picture))
+            INSERT INTO spark_streams.created_users(id, first_name, last_name, gender, address,
+                post_code, email, username, dob, registered_date, phone, picture)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (user_id, first_name, last_name, gender, address,
+              postcode, email, username, dob, registered_date, phone, picture))
         logging.info(f"Data inserted for {first_name} {last_name}")
+
     except Exception as e:
         logging.error(f'could not insert data due to {e}')
 
 
 def create_spark_connection():
     s_conn = None
+
     try:
         s_conn = SparkSession.builder \
             .appName('SparkDataStreaming') \
-            .config('spark.jars.packages', "com.datastax.spark:spark-cassandra-connector_2.13:3.4.1,"
-                                           "org.apache.spark:spark-sql-kafka-0-10_2.13:3.4.1") \
-            .config('spark.cassandra.connection.host', 'cassandra_db') \
-            .config('spark.cassandra.connection.port', '9042') \
-            .config('spark.cassandra.auth.username', 'cassandra') \
-            .config('spark.cassandra.auth.password', 'cassandra') \
-            .config('spark.sql.streaming.checkpointLocation', '/tmp/checkpoint') \
-            .master('spark://spark-master:7077') \
+            .config('spark.jars.packages', "com.datastax.spark:spark-cassandra-connector_2.12:3.4.1,"
+                                           "org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1") \
+            .config('spark.cassandra.connection.host', 'cassandra') \
             .getOrCreate()
 
         s_conn.sparkContext.setLogLevel("ERROR")
         logging.info("Spark connection created successfully!")
     except Exception as e:
         logging.error(f"Couldn't create the spark session due to exception {e}")
+
     return s_conn
 
 
 def connect_to_kafka(spark_conn):
     spark_df = None
     try:
+        # FIX: Changed from localhost:9092 to broker:29092 (Docker internal network)
         spark_df = spark_conn.readStream \
             .format('kafka') \
             .option('kafka.bootstrap.servers', 'broker:29092') \
@@ -112,12 +94,14 @@ def connect_to_kafka(spark_conn):
         logging.info("kafka dataframe created successfully")
     except Exception as e:
         logging.warning(f"kafka dataframe could not be created because: {e}")
+
     return spark_df
 
 
 def create_cassandra_connection():
     try:
-        cluster = Cluster(['cassandra_db'])
+        # FIX: Changed from localhost to cassandra (Docker service hostname)
+        cluster = Cluster(['cassandra'])
         cas_session = cluster.connect()
         return cas_session
     except Exception as e:
@@ -126,6 +110,7 @@ def create_cassandra_connection():
 
 
 def create_selection_df_from_kafka(spark_df):
+    # FIX: Added dob field to match what kafka_stream.py produces
     schema = StructType([
         StructField("id", StringType(), False),
         StructField("first_name", StringType(), False),
@@ -135,7 +120,7 @@ def create_selection_df_from_kafka(spark_df):
         StructField("post_code", StringType(), False),
         StructField("email", StringType(), False),
         StructField("username", StringType(), False),
-        StructField("dob", StringType(), False),
+        StructField("dob", StringType(), True),
         StructField("registered_date", StringType(), False),
         StructField("phone", StringType(), False),
         StructField("picture", StringType(), False)
@@ -143,6 +128,8 @@ def create_selection_df_from_kafka(spark_df):
 
     sel = spark_df.selectExpr("CAST(value AS STRING)") \
         .select(from_json(col('value'), schema).alias('data')).select("data.*")
+    print(sel)
+
     return sel
 
 
@@ -162,11 +149,10 @@ if __name__ == "__main__":
 
             logging.info("Streaming is being started...")
 
-            streaming_query = (selection_df.writeStream
-                               .foreachBatch(lambda df, epoch_id:
-                                             df.foreach(lambda row: insert_data(session, **row.asDict())))
-                               .outputMode("append")
-                               .trigger(processingTime="5 seconds")
+            streaming_query = (selection_df.writeStream.format("org.apache.spark.sql.cassandra")
+                               .option('checkpointLocation', '/tmp/checkpoint')
+                               .option('keyspace', 'spark_streams')
+                               .option('table', 'created_users')
                                .start())
 
             streaming_query.awaitTermination()
