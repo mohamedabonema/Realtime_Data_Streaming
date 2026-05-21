@@ -1,46 +1,50 @@
-قولي كل الخطواط الترينمال اللي عملنها كلها من الاول للاخر10:23 AMClaude responded: ١ — تجهيز الملفات:١ — تجهيز الملفات:
-powershellmkdir dags, script
+# 1 - تجهيز الملفات
+mkdir dags, script
 
-٢ — تصحيح الـ entrypoint (Windows line endings):
-powershell(Get-Content .\script\entrypoint.sh -Raw) -replace "`r`n", "`n" | Set-Content .\script\entrypoint.sh -NoNewline
+# 2 - تصحيح الـ entrypoint
+(Get-Content .\script\entrypoint.sh -Raw) -replace "`r`n", "`n" | Set-Content .\script\entrypoint.sh -NoNewline
 
-٣ — تصحيح الـ requirements.txt:
-powershellSet-Content .\requirements.txt -Value "apache-airflow==2.6.0`nkafka-python==2.0.2`nrequests==2.31.0`nurllib3==2.0.7`ncertifi==2024.2.2`napache-airflow-providers-apache-kafka==1.3.0" -Encoding UTF8
+# 3 - تصحيح الـ requirements.txt
+Set-Content .\requirements.txt -Value "apache-airflow==2.6.0`nkafka-python==2.0.2`nrequests==2.31.0`nurllib3==2.0.7`ncertifi==2024.2.2`napache-airflow-providers-apache-kafka==1.3.0" -Encoding UTF8
 
-٤ — تشغيل Docker:
-powershelldocker compose up -d
+# 4 - تشغيل Docker
+docker compose up -d
 
-٥ — تشغيل الـ scheduler:
-powershelldocker compose up -d scheduler
+# 5 - تشغيل الـ scheduler
+docker compose up -d scheduler
 
-٦ — تأكد إن Kafka استلم البيانات:
-powershelldocker exec -it broker kafka-topics --list --bootstrap-server localhost:9092
+# 6 - تأكد إن Kafka استلم البيانات
+docker exec -it broker kafka-topics --list --bootstrap-server localhost:9092
 
-٧ — إصلاح permissions الـ Spark:
-powershelldocker exec -it --user root spark-master mkdir -p /home/spark/.ivy2/cache
+# 7 - إصلاح permissions الـ Spark
+docker exec -it --user root spark-master mkdir -p /home/spark/.ivy2/cache
 docker exec -it --user root spark-master chmod -R 777 /home/spark/.ivy2
 
-٨ — نسخ spark_stream.py للـ container:
-powershelldocker cp spark_stream.py spark-master:/opt/spark/spark_stream.py
+# 8 - نسخ spark_stream.py للـ container
+docker cp spark_stream.py spark-master:/opt/spark/spark_stream.py
 
-٩ — تثبيت cassandra-driver:
-powershelldocker exec -it --user root spark-master pip install cassandra-driver
+# 9 - تثبيت cassandra-driver
+docker exec -it --user root spark-master pip install cassandra-driver
 
-١٠ — تشغيل Spark:
-powershelldocker exec -it spark-master /opt/spark/bin/spark-submit --packages com.datastax.spark:spark-cassandra-connector_2.12:3.4.1,org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1 /opt/spark/spark_stream.py
+# 10 - تشغيل Spark
+docker exec -it spark-master /opt/spark/bin/spark-submit --packages com.datastax.spark:spark-cassandra-connector_2.12:3.4.1,org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1 /opt/spark/spark_stream.py
 
-١١ — التحقق من البيانات في Cassandra:
-powershelldocker exec -it cassandra cqlsh -u cassandra -p cassandra
-وجوا الـ cqlsh:
-sqlSELECT * FROM spark_streams.created_users LIMIT 10;
+# 11 - التحقق من البيانات في Cassandra
+docker exec -it cassandra cqlsh -u cassandra -p cassandra
 
-أيوه ينفع! تقدر تصدّر البيانات من Cassandra لـ CSV بالأمر ده:
-١ — جوا الـ cqlsh:
-powershelldocker exec -it cassandra cqlsh -u cassandra -p cassandra
-sqlCOPY spark_streams.created_users TO '/tmp/users.csv' WITH HEADER = TRUE;
-٢ — انسخ الـ CSV من الـ container لجهازك:
-powershelldocker cp cassandra:/tmp/users.csv .\users.csv
+
+
+
+SELECT * FROM spark_streams.created_users LIMIT 10;
+
+COPY spark_streams.created_users TO '/tmp/users.csv' WITH HEADER = TRUE;
 exit
-وبعدين في PowerShell:
-powershelldocker cp cassandra:/tmp/users.csv .\users.csv
+
+
+# 12 - تنزيل الـ CSV على جهازك
+docker cp cassandra:/tmp/users.csv .\users.csv
+
+# 13 - فتح الملف
 start .\users.csv
+
+
