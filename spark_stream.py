@@ -128,7 +128,11 @@ def create_selection_df_from_kafka(spark_df):
 
     sel = spark_df.selectExpr("CAST(value AS STRING)") \
         .select(from_json(col('value'), schema).alias('data')).select("data.*")
+
+    # Transformation: استخراج الـ username من الـ email
+    #sel = sel.withColumn("email_username", split(col("email"), "@")[0])
     print(sel)
+
 
     return sel
 
